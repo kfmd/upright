@@ -2,12 +2,115 @@
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const DEFAULTS = { sens: 0.5, delay: 20, repeat: 120, notify: true, sound: true, preview: true };
-const MSGS = ['Time to sit up tall.', 'Shoulders back, head up.', 'Posture check: you’re slouching.', 'Straighten up. Your spine will thank you.'];
 const COLORS = { good: '#16a37f', slouch: '#e5484d', away: '#94a3b8' };
 
 let profile = null, stream = null, landmarker = null, ticker = null, audio = null;
 let mode = 'idle';                      // idle | cal (calibrating) | mon (monitoring)
 let cap = null, calStep = 0, calData = {}, tracker = null, lastLm = null, lastRun = 0, lastTs = 0;
+
+
+/* ---------------- LANGUAGES + REMINDER MESSAGES ---------------- */
+const I18N = {
+  en: {
+    whoTitle: 'Who’s sitting?', whoSub: 'Everyone gets their own profile and calibration.', namePh: 'Your name', go: 'Continue',
+    stepN: 'Step {n} of 2', camOn: 'Turn on camera', starting: 'Starting…',
+    s1t: 'Show me your best posture', s1b: 'Capture good posture',
+    s1x: 'Sit the way you want to sit all day: back straight, shoulders relaxed, head over your shoulders. Keep your face and both shoulders in view.',
+    s2t: 'Now slouch the way you usually do', s2b: 'Capture slouched posture',
+    s2x: 'Let yourself sag: head forward, shoulders rounded. The clearer the difference, the better the detection.',
+    seen: '✓ I can see your head and shoulders.', unseen: 'I can’t see you clearly. Keep your face and both shoulders in view.',
+    fewFrames: 'I only saw you in a few frames. Check the lighting, keep your head and shoulders in view, and try again.',
+    identical: 'Both postures looked identical to me. Slouch more clearly and try again.',
+    weak: 'The two postures were hard to tell apart. Try Recalibrate with a bigger slouch.',
+    paused: 'Paused', good: 'Sitting tall', slouch: 'Slouching', away: 'Can’t see you',
+    subPaused: 'Press start. You can then switch to other apps; it keeps watching.',
+    subSlouch: 'Slouching for {s}s', subRemind: ', reminder in {r}s', subAway: 'Step back into view to resume.', subGood: 'Nice posture.',
+    gLo: 'Slouched', gHi: 'Upright', stGood: 'upright', stTime: 'monitored', stAlerts: 'reminders',
+    start: 'Start monitoring', pause: 'Pause monitoring', sens: 'Sensitivity', sRel: 'Relaxed', sBal: 'Balanced', sStr: 'Strict',
+    delayL: 'Remind me after slouching for', repeatL: 'Repeat reminder every',
+    t10: '10 seconds', t20: '20 seconds', t30: '30 seconds', t60: '1 minute', t120: '2 minutes', t300: '5 minutes', t600: '10 minutes',
+    optNotify: 'Desktop notifications', optSound: 'Chime', optPreview: 'Show camera preview',
+    test: 'Test reminder', recal: 'Recalibrate', switch: 'Switch user', titleBad: '🔴 Sit up!',
+    errSecure: 'The camera needs a secure address: use http://localhost:8000 on the host Mac, or the https:// link on other devices.',
+    errModel: 'Pose model files are missing. Stop the server and run  python3 server.py  once while online.',
+    errName: 'Use 1–24 letters, numbers, spaces or dashes for the name.',
+    errBlocked: 'Camera access is blocked. Allow the camera for this site in your browser, and in macOS System Settings > Privacy & Security > Camera.',
+    errNoCam: 'No camera was found.', errBusy: 'The camera is busy. Close other apps using it (Zoom, FaceTime…).' },
+  id: {
+    whoTitle: 'Siapa yang sedang duduk?', whoSub: 'Setiap orang memiliki profil dan kalibrasi masing-masing.', namePh: 'Nama Anda', go: 'Lanjutkan',
+    stepN: 'Langkah {n} dari 2', camOn: 'Nyalakan kamera', starting: 'Memulai…',
+    s1t: 'Tunjukkan postur terbaik Anda', s1b: 'Ambil postur tegak',
+    s1x: 'Duduklah seperti yang Anda inginkan sepanjang hari: punggung tegak, bahu rileks, kepala di atas bahu. Pastikan wajah dan kedua bahu terlihat.',
+    s2t: 'Sekarang membungkuklah seperti biasanya', s2b: 'Ambil postur membungkuk',
+    s2x: 'Biarkan tubuh Anda melorot: kepala maju, bahu membulat. Semakin jelas perbedaannya, semakin baik deteksinya.',
+    seen: '✓ Kepala dan bahu Anda terlihat.', unseen: 'Anda tidak terlihat dengan jelas. Pastikan wajah dan kedua bahu berada di dalam bingkai.',
+    fewFrames: 'Anda hanya terlihat pada beberapa bingkai. Periksa pencahayaan, pastikan kepala dan bahu terlihat, lalu coba lagi.',
+    identical: 'Kedua postur tampak identik. Membungkuklah lebih jelas, lalu coba lagi.',
+    weak: 'Kedua postur sulit dibedakan. Coba kalibrasi ulang dengan membungkuk lebih jelas.',
+    paused: 'Dijeda', good: 'Duduk tegak', slouch: 'Membungkuk', away: 'Tidak terlihat',
+    subPaused: 'Tekan mulai. Setelah itu Anda dapat beralih ke aplikasi lain; pemantauan tetap berjalan.',
+    subSlouch: 'Membungkuk selama {s} detik', subRemind: ', pengingat dalam {r} detik', subAway: 'Kembali ke depan kamera untuk melanjutkan.', subGood: 'Postur yang baik.',
+    gLo: 'Membungkuk', gHi: 'Tegak', stGood: 'tegak', stTime: 'dipantau', stAlerts: 'pengingat',
+    start: 'Mulai pemantauan', pause: 'Jeda pemantauan', sens: 'Sensitivitas', sRel: 'Santai', sBal: 'Seimbang', sStr: 'Ketat',
+    delayL: 'Ingatkan setelah membungkuk selama', repeatL: 'Ulangi pengingat setiap',
+    t10: '10 detik', t20: '20 detik', t30: '30 detik', t60: '1 menit', t120: '2 menit', t300: '5 menit', t600: '10 menit',
+    optNotify: 'Notifikasi desktop', optSound: 'Bunyi lonceng', optPreview: 'Tampilkan pratinjau kamera',
+    test: 'Uji pengingat', recal: 'Kalibrasi ulang', switch: 'Ganti pengguna', titleBad: '🔴 Duduk tegak!',
+    errSecure: 'Kamera memerlukan alamat yang aman: gunakan http://localhost:8000 di Mac host, atau tautan https:// di perangkat lain.',
+    errModel: 'File model pose tidak ditemukan. Hentikan server dan jalankan  python3 server.py  sekali saat terhubung ke internet.',
+    errName: 'Gunakan 1–24 huruf, angka, spasi, atau tanda hubung untuk nama.',
+    errBlocked: 'Akses kamera diblokir. Izinkan kamera untuk situs ini di browser, dan di Pengaturan Sistem macOS > Privasi & Keamanan > Kamera.',
+    errNoCam: 'Kamera tidak ditemukan.', errBusy: 'Kamera sedang digunakan. Tutup aplikasi lain yang memakainya (Zoom, FaceTime…).' } };
+
+// {name} becomes the profile name. "egg" messages pop up randomly (easter eggs); "late" after 11pm; five/ten at reminder #5 and #10.
+const MSGS = {
+  en: {
+    normal: ['{name}, time to sit up tall.', 'Shoulders back, {name}. Head up.', 'Posture check, {name}: you’re slouching.',
+             'Straighten up, {name}. Your spine will thank you.', 'Hey {name}, your back called. It wants a word.'],
+    egg: ['{name}, you’re folding like a lawn chair.', 'Plot twist, {name}: you are not a shrimp. Be a giraffe.',
+          'Beep boop. Spine drifting off course, {name}. Recalculating…', 'Fun fact, {name}: your future self is begging you to sit up.',
+          '{name}, the chair is not a hammock.', 'Slouch detected. Dramatic sigh. Sit up, {name}.',
+          'Your posture called, {name}. It said “help”.'],
+    late: ['It’s late, {name}. Sit up straight, then go to bed.'],
+    five: 'Reminder #5 already, {name}. Impressive commitment to slouching. Now sit up.',
+    ten: '10 reminders, {name}! We need to talk about your chair.' },
+  id: {
+    normal: ['{name}, tegakkan badan dong, jangan loyo kayak cucian basah.', 'Woy {name}, punggungmu minta diperhatiin nih. Duduk yang bener ya!',
+             '{name}, ini postur apa udang rebus? Yuk tegak lagi.', 'Cek postur: kamu lagi bungkuk, {name}. Sat set tegakkan!',
+             'Bestie {name}, jangan mager ya. Tegak dikit dong.'],
+    egg: ['{name}, kamu lagi jadi udang goreng nih. Balik jadi jerapah ya!', 'Tulang belakangmu lagi healing, tapi bukan gini caranya, {name}.',
+          'Waduh {name}, bungkuknya udah level dewa. Tegak lagi gih.', 'Kursi itu bukan kasur, {name}. Duduk yang tegak, jangan rebahan.',
+          'Spill: kamu di masa depan mohon-mohon biar kamu duduk tegak, {name}.',
+          '{name}, jangan kayak sinyal di pelosok: makin lama makin turun. Naikin lagi!', 'Gaskeun tegak, {name}! Pinggangmu belum mau pensiun dini.'],
+    late: ['Udah malem nih, {name}. Tegak dulu, abis itu tidur ya, jangan begadang.'],
+    five: 'Udah 5 kali diingetin nih, {name}. Capek kan aku? Yuk tegak beneran.',
+    ten: '10 kali, {name}! Kita perlu ngobrol soal kursi kamu.' } };
+
+let lang = localStorage.getItem('upright-lang') || ((navigator.language || '').startsWith('id') ? 'id' : 'en'), lastMsg = '';
+const t = (k, v = {}) => (I18N[lang][k] ?? I18N.en[k] ?? k).replace(/\{(\w+)\}/g, (_, x) => v[x] ?? '');
+function applyLang() {
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach(e => e.textContent = t(e.dataset.i18n));
+  $('name').placeholder = t('namePh');
+  document.querySelectorAll('.lang button').forEach(b => b.classList.toggle('on', b.dataset.lang === lang));
+  if (!$('s-cal').classList.contains('hidden') && !cap && !$('calBtn').disabled) showStep();
+  if (profile && !$('s-mon').classList.contains('hidden')) render();
+}
+function setLang(l) {
+  lang = l; localStorage.setItem('upright-lang', l);
+  if (profile) { profile.settings.lang = l; persist(); }
+  applyLang();
+}
+function pickMsg() {
+  const M = MSGS[lang], n = tracker.alerts, h = new Date().getHours();
+  let pool = M.normal;
+  if (n === 5) pool = [M.five]; else if (n === 10) pool = [M.ten];
+  else if ((h >= 23 || h < 4) && Math.random() < 0.4) pool = M.late;
+  else if (Math.random() < 0.25) pool = M.egg;
+  let msg, tries = 0;
+  do { msg = pool[Math.random() * pool.length | 0]; } while (msg === lastMsg && pool.length > 1 && ++tries < 5);
+  return (lastMsg = msg).replace(/\{name\}/g, profile.name);
+}
 
 /* ---------------- 1. THE POSTURE MATH ----------------
    From the pose landmarks we compute 5 numbers (all relative to your shoulder width, so they
@@ -73,7 +176,7 @@ function advance(tr, now, s, cfg) {          // returns true when a reminder sho
 
 /* ---------------- 3. CAMERA + MODEL ---------------- */
 async function startEngine() {
-  if (!window.isSecureContext || !navigator.mediaDevices) throw new Error('The camera needs a secure address: use http://localhost:8000 on the host Mac, or the https:// link on other devices.');
+  if (!window.isSecureContext || !navigator.mediaDevices) throw new Error(t('errSecure'));
   if (!stream) {
     stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }, audio: false });
     for (const id of ['engine', 'v1', 'v2']) { $(id).srcObject = stream; $(id).play().catch(() => {}); }
@@ -82,7 +185,7 @@ async function startEngine() {
   if (!landmarker) {
     let lib;
     try { lib = await import('/vendor/vision_bundle.mjs'); }
-    catch (e) { throw new Error('Pose model files are missing. Stop the server and run  python3 server.py  once while online.'); }
+    catch (e) { throw new Error(t('errModel')); }
     const files = await lib.FilesetResolver.forVisionTasks('/vendor/wasm');
     landmarker = await lib.PoseLandmarker.createFromOptions(files, {
       baseOptions: { modelAssetPath: '/vendor/pose.task', delegate: 'CPU' }, runningMode: 'VIDEO', numPoses: 1 });
@@ -121,11 +224,7 @@ function draw(c, color) {
 }
 
 /* ---------------- 4. CALIBRATION ---------------- */
-const STEPS = [
-  { key: 'good', title: 'Show me your best posture', btn: 'Capture good posture',
-    text: 'Sit the way you want to sit all day: back straight, shoulders relaxed, head over your shoulders. Keep your face and both shoulders in view.' },
-  { key: 'slouch', title: 'Now slouch the way you usually do', btn: 'Capture slouched posture',
-    text: 'Let yourself sag: head forward, shoulders rounded. The clearer the difference, the better the detection.' }];
+const STEPS = [{ key: 'good', k: 's1' }, { key: 'slouch', k: 's2' }];
 
 function show(id) { ['s-profile', 's-cal', 's-mon'].forEach(x => $(x).classList.toggle('hidden', x !== id)); }
 function startCal() {
@@ -133,12 +232,12 @@ function startCal() {
 }
 function showStep() {
   const s = STEPS[calStep];
-  $('step').textContent = `Step ${calStep + 1} of 2`; $('calTitle').textContent = s.title; $('calText').textContent = s.text;
-  $('calBtn').textContent = stream && landmarker ? s.btn : 'Turn on camera'; $('calBtn').disabled = false; $('calBar').style.width = '0';
+  $('step').textContent = t('stepN', { n: calStep + 1 }); $('calTitle').textContent = t(s.k + 't'); $('calText').textContent = t(s.k + 'x');
+  $('calBtn').textContent = stream && landmarker ? t(s.k + 'b') : t('camOn'); $('calBtn').disabled = false; $('calBar').style.width = '0';
 }
 function calFrame(f) {
   draw($('c1'), f ? COLORS.good : '#f59e0b');
-  if (!cap) { $('calMsg').textContent = f ? '✓ I can see your head and shoulders.' : 'I can’t see you clearly. Keep your face and both shoulders in view.'; return; }
+  if (!cap) { $('calMsg').textContent = t(f ? 'seen' : 'unseen'); return; }
   if (f) cap.samples.push(f);
   const p = Math.min(1, (performance.now() - cap.start) / 5000);
   $('calBar').style.width = p * 100 + '%';
@@ -152,46 +251,47 @@ async function capture() {
 }
 function finishCapture() {
   const s = cap.samples; cap = null; $('calBar').style.width = '0';
-  if (s.length < 12) { $('calErr').textContent = 'I only saw you in a few frames. Check the lighting, keep your head and shoulders in view, and try again.'; $('calBtn').disabled = false; return; }
+  if (s.length < 12) { $('calErr').textContent = t('fewFrames'); $('calBtn').disabled = false; return; }
   calData[STEPS[calStep].key] = s;
   if (++calStep < STEPS.length) return showStep();
   let model;
   try { model = buildModel(calData.good, calData.slouch); }
-  catch (e) { calStep = 1; showStep(); $('calErr').textContent = 'Both postures looked identical to me. Slouch more clearly and try again.'; return; }
+  catch (e) { calStep = 1; showStep(); $('calErr').textContent = t('identical'); return; }
   const q = 1 / (sdv(calData.good.map(f => score(model, f))) + sdv(calData.slouch.map(f => score(model, f))) + 1e-6);
   profile.calib = { model, quality: q };
   persist(); showMon();
-  if (q < 2.5) flash('The two postures were hard to tell apart. Try Recalibrate with a bigger slouch.');
+  if (q < 2.5) flash(t('weak'));
 }
 
 /* ---------------- 5. MONITORING + REMINDERS ---------------- */
 function showMon() { mode = 'idle'; show('s-mon'); applySettings(); render(); }
 function monFrame(f, now) {
+  if (!profile?.calib) return;
   const fire = advance(tracker, now, f ? score(profile.calib.model, f) : null, profile.settings);
   if (fire) alertUser();
   render();
   if (profile.settings.preview) draw($('c2'), COLORS[tracker.state]);
 }
 function render() {
-  const t = tracker || newTracker(), s = profile.settings, on = mode === 'mon';
-  const st = !on ? 'idle' : t.state === 'slouch' ? 'bad' : t.state === 'good' ? 'good' : 'away';
+  const tr = tracker || newTracker(), s = profile.settings, on = mode === 'mon';
+  const st = !on ? 'idle' : tr.state === 'slouch' ? 'bad' : tr.state === 'good' ? 'good' : 'away';
   document.body.dataset.state = st;
-  $('status').textContent = !on ? 'Paused' : { good: 'Sitting tall', slouch: 'Slouching', away: 'Can’t see you' }[t.state];
-  const secs = Math.round((performance.now() - t.since) / 1000);
-  $('sub').textContent = !on ? 'Press start. You can then switch to other apps; it keeps watching.'
-    : t.state === 'slouch' ? `Slouching for ${secs}s` + (secs < s.delay ? `, reminder in ${s.delay - secs}s` : '')
-    : t.state === 'away' ? 'Step back into view to resume.' : 'Nice posture.';
-  $('gFill').style.width = on && t.smooth !== null ? Math.max(0, Math.min(1, 1 - t.smooth)) * 100 + '%' : '0';
+  $('status').textContent = t(!on ? 'paused' : tr.state);
+  const secs = Math.round((performance.now() - tr.since) / 1000);
+  $('sub').textContent = !on ? t('subPaused')
+    : tr.state === 'slouch' ? t('subSlouch', { s: secs }) + (secs < s.delay ? t('subRemind', { r: s.delay - secs }) : '')
+    : tr.state === 'away' ? t('subAway') : t('subGood');
+  $('gFill').style.width = on && tr.smooth !== null ? Math.max(0, Math.min(1, 1 - tr.smooth)) * 100 + '%' : '0';
   $('gTick').style.left = (1 - s.sens) * 100 + '%';
-  $('stGood').textContent = t.mon > 0 ? Math.round(100 * t.goodT / t.mon) + '%' : '–';
-  $('stTime').textContent = Math.floor(t.mon / 60) + 'm'; $('stAlerts').textContent = t.alerts;
-  $('toggle').textContent = on ? 'Pause monitoring' : 'Start monitoring';
-  document.title = st === 'bad' ? '🔴 Sit up! · Upright' : st === 'good' ? '🟢 Upright' : 'Upright';
+  $('stGood').textContent = tr.mon > 0 ? Math.round(100 * tr.goodT / tr.mon) + '%' : '–';
+  $('stTime').textContent = Math.floor(tr.mon / 60) + 'm'; $('stAlerts').textContent = tr.alerts;
+  $('toggle').textContent = t(on ? 'pause' : 'start');
+  document.title = st === 'bad' ? t('titleBad') + ' · Upright' : st === 'good' ? '🟢 Upright' : 'Upright';
   $('icon').href = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><circle cx='5' cy='5' r='5' fill='${{ bad: COLORS.slouch, good: COLORS.good }[st] || COLORS.away}'/></svg>`);
 }
 function flash(msg) { $('banner').textContent = msg; $('banner').classList.remove('hidden'); setTimeout(() => $('banner').classList.add('hidden'), 8000); }
 function alertUser() {
-  const msg = MSGS[Math.random() * MSGS.length | 0], s = profile.settings;
+  const msg = pickMsg(), s = profile.settings;
   flash(msg);
   if (s.notify && window.Notification && Notification.permission === 'granted') {
     try { const n = new Notification('Upright', { body: msg, tag: 'upright', silent: true }); n.onclick = () => { window.focus(); n.close(); }; setTimeout(() => n.close(), 8000); } catch (e) {}
@@ -221,11 +321,12 @@ function applySettings() {
 }
 async function openProfile(raw) {
   const name = raw.trim().replace(/\s+/g, ' ');
-  if (!/^[\p{L}\p{N}_\- ]{1,24}$/u.test(name)) return fail(new Error('Use 1–24 letters, numbers, spaces or dashes for the name.'));
+  if (!/^[\p{L}\p{N}_\- ]{1,24}$/u.test(name)) return fail(new Error(t('errName')));
   unlockAudio();
   const r = await fetch('/api/profiles/' + encodeURIComponent(slug(name)));
   profile = r.ok ? await r.json() : { name, settings: {}, calib: null };
-  profile.settings = { ...DEFAULTS, ...profile.settings };
+  profile.settings = { ...DEFAULTS, lang, ...profile.settings };
+  if (I18N[profile.settings.lang]) { lang = profile.settings.lang; localStorage.setItem('upright-lang', lang); } applyLang();
   localStorage.setItem('upright-user', name); $('who').textContent = name;
   tracker = newTracker();
   profile.calib ? showMon() : startCal();
@@ -235,8 +336,7 @@ async function listPeople() {
   $('people').replaceChildren(...list.map(p => { const b = document.createElement('button'); b.textContent = p.name; b.onclick = () => guard(openProfile)(p.name); return b; }));
 }
 function fail(e) {
-  const known = { NotAllowedError: 'Camera access is blocked. Allow the camera for this site in your browser, and in macOS System Settings > Privacy & Security > Camera.',
-    NotFoundError: 'No camera was found.', NotReadableError: 'The camera is busy. Close other apps using it (Zoom, FaceTime…).' };
+  const known = { NotAllowedError: t('errBlocked'), NotFoundError: t('errNoCam'), NotReadableError: t('errBusy') };
   $('error').textContent = known[e.name] || e.message || String(e); $('error').classList.remove('hidden');
 }
 const guard = fn => async (...a) => { try { $('error').classList.add('hidden'); await fn(...a); } catch (e) { console.error(e); fail(e); $('calBtn').disabled = false; } };
@@ -246,7 +346,7 @@ $('name').onkeydown = e => { if (e.key === 'Enter') $('go').click(); };
 $('calBtn').onclick = guard(async () => {
   unlockAudio();
   if (!stream || !landmarker) {
-    $('calBtn').disabled = true; $('calBtn').textContent = 'Starting…';
+    $('calBtn').disabled = true; $('calBtn').textContent = t('starting');
     if (window.Notification && Notification.permission === 'default') Notification.requestPermission();
     try { await startEngine(); } finally { showStep(); }
     mode = 'cal'; return;
@@ -274,5 +374,7 @@ $('sens').onclick = e => { if (e.target.dataset.v) { profile.settings.sens = +e.
 
 /* ---------------- start ---------------- */
 $('name').value = localStorage.getItem('upright-user') || '';
+document.querySelectorAll('.lang button').forEach(b => b.onclick = () => setLang(b.dataset.lang));
+applyLang();
 listPeople();
-if (!window.isSecureContext || !navigator.mediaDevices) fail(new Error('The camera needs a secure address: use http://localhost:8000 on the host Mac, or the https:// link on other devices.'));
+if (!window.isSecureContext || !navigator.mediaDevices) fail(new Error(t('errSecure')));

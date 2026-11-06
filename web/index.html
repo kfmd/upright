@@ -9,7 +9,7 @@
 </head>
 <body data-state="idle">
   <video id="engine" muted playsinline></video>
-  <header><span class="logo">Upright</span><span id="who"></span></header>
+  <header><span class="logo">Upright</span><span><span id="who"></span><span class="lang"><button data-lang="en">EN</button><button data-lang="id">ID</button></span></span></header>
   <div id="banner" class="banner hidden"></div>
 
   <main>
@@ -17,11 +17,11 @@
 
     <!-- 1. who is sitting? -->
     <section id="s-profile" class="card narrow">
-      <h1>Who’s sitting?</h1>
-      <p class="muted">Everyone gets their own profile and calibration.</p>
+      <h1 data-i18n="whoTitle"></h1>
+      <p class="muted" data-i18n="whoSub"></p>
       <div id="people" class="chips"></div>
       <input id="name" maxlength="24" placeholder="Your name" autocomplete="off">
-      <button id="go" class="btn">Continue</button>
+      <button id="go" class="btn" data-i18n="go"></button>
     </section>
 
     <!-- 2. calibration -->
@@ -46,29 +46,29 @@
         <h2 id="status">Paused</h2>
         <p id="sub" class="muted"></p>
         <div class="gauge"><i id="gFill"></i><b id="gTick"></b></div>
-        <div class="gl"><span>Slouched</span><span>Upright</span></div>
+        <div class="gl"><span data-i18n="gLo"></span><span data-i18n="gHi"></span></div>
         <div class="stats">
-          <div><b id="stGood">–</b><span>upright</span></div>
-          <div><b id="stTime">0m</b><span>monitored</span></div>
-          <div><b id="stAlerts">0</b><span>reminders</span></div>
+          <div><b id="stGood">–</b><span data-i18n="stGood"></span></div>
+          <div><b id="stTime">0m</b><span data-i18n="stTime"></span></div>
+          <div><b id="stAlerts">0</b><span data-i18n="stAlerts"></span></div>
         </div>
         <button id="toggle" class="btn">Start monitoring</button>
       </div>
       <div class="card">
         <div class="stage small" id="stage2"><video id="v2" muted playsinline></video><canvas id="c2"></canvas></div>
-        <div class="field"><span>Sensitivity</span>
-          <div class="seg" id="sens"><button data-v="0.65">Relaxed</button><button data-v="0.5">Balanced</button><button data-v="0.35">Strict</button></div></div>
-        <div class="field"><span>Remind me after slouching for</span>
-          <select id="delay"><option value="10">10 seconds</option><option value="20">20 seconds</option><option value="30">30 seconds</option><option value="60">1 minute</option><option value="120">2 minutes</option></select></div>
-        <div class="field"><span>Repeat reminder every</span>
-          <select id="repeat"><option value="60">1 minute</option><option value="120">2 minutes</option><option value="300">5 minutes</option><option value="600">10 minutes</option></select></div>
-        <label class="check"><input type="checkbox" id="optNotify"> Desktop notifications</label>
-        <label class="check"><input type="checkbox" id="optSound"> Chime</label>
-        <label class="check"><input type="checkbox" id="optPreview"> Show camera preview</label>
+        <div class="field"><span data-i18n="sens"></span>
+          <div class="seg" id="sens"><button data-v="0.65" data-i18n="sRel"></button><button data-v="0.5" data-i18n="sBal"></button><button data-v="0.35" data-i18n="sStr"></button></div></div>
+        <div class="field"><span data-i18n="delayL"></span>
+          <select id="delay"><option value="10" data-i18n="t10"></option><option value="20" data-i18n="t20"></option><option value="30" data-i18n="t30"></option><option value="60" data-i18n="t60"></option><option value="120" data-i18n="t120"></option></select></div>
+        <div class="field"><span data-i18n="repeatL"></span>
+          <select id="repeat"><option value="60" data-i18n="t60"></option><option value="120" data-i18n="t120"></option><option value="300" data-i18n="t300"></option><option value="600" data-i18n="t600"></option></select></div>
+        <label class="check"><input type="checkbox" id="optNotify"> <span data-i18n="optNotify"></span></label>
+        <label class="check"><input type="checkbox" id="optSound"> <span data-i18n="optSound"></span></label>
+        <label class="check"><input type="checkbox" id="optPreview"> <span data-i18n="optPreview"></span></label>
         <div class="row">
-          <button id="test" class="btn ghost">Test reminder</button>
-          <button id="recal" class="btn ghost">Recalibrate</button>
-          <button id="switch" class="btn ghost">Switch user</button>
+          <button id="test" class="btn ghost" data-i18n="test"></button>
+          <button id="recal" class="btn ghost" data-i18n="recal"></button>
+          <button id="switch" class="btn ghost" data-i18n="switch"></button>
         </div>
       </div>
     </section>

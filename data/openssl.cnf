@@ -5,4 +5,4 @@ prompt=no
 [dn]
 CN=Upright
 [v3]
-subjectAltName=DNS:localhost,IP:127.0.0.1,IP:192.168.50.56
+subjectAltName=DNS:localhost,IP:127.0.0.1,IP:10.10.102.246
